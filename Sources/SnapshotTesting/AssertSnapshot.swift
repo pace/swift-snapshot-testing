@@ -183,7 +183,7 @@ public func verifySnapshot<Value, Format>(
       let snapshotDirectoryUrl = snapshotDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
         ?? fileUrl
           .deletingLastPathComponent()
-          .appendingPathComponent("__Snapshots__")
+          .appendingPathComponent("Snapshots")
           .appendingPathComponent(fileName)
 
       let identifier: String
@@ -278,13 +278,25 @@ public func verifySnapshot<Value, Format>(
         return nil
       }
 
-      let artifactsUrl = URL(
-        fileURLWithPath: ProcessInfo.processInfo.environment["SNAPSHOT_ARTIFACTS"] ?? NSTemporaryDirectory(), isDirectory: true
+      // MARK: - Failed snapshots
+      let failedSnapshotUrl = URL(
+        fileURLWithPath: ProcessInfo.processInfo.environment["FAILED_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true
       )
-      let artifactsSubUrl = artifactsUrl.appendingPathComponent(fileName)
-      try fileManager.createDirectory(at: artifactsSubUrl, withIntermediateDirectories: true)
-      let failedSnapshotFileUrl = artifactsSubUrl.appendingPathComponent(snapshotFileUrl.lastPathComponent)
+      let failedSnapshotSubUrl = failedSnapshotUrl.appendingPathComponent(fileName)
+      try fileManager.createDirectory(at: failedSnapshotSubUrl, withIntermediateDirectories: true)
+      let failedSnapshotFileUrl = failedSnapshotSubUrl.appendingPathComponent(snapshotFileUrl.lastPathComponent)
       try snapshotting.diffing.toData(diffable).write(to: failedSnapshotFileUrl)
+
+      // MARK: - Diff snapshots
+      if let difference = snapshotting.diffing.difference?(reference, diffable) {
+        let differenceSnapshotUrl = URL(
+          fileURLWithPath: ProcessInfo.processInfo.environment["DIFF_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true
+        )
+        let differenceSnapshotSubUrl = differenceSnapshotUrl.appendingPathComponent(fileName)
+        try fileManager.createDirectory(at: differenceSnapshotSubUrl, withIntermediateDirectories: true)
+        let differenceSnapshotFileUrl = differenceSnapshotSubUrl.appendingPathComponent(snapshotFileUrl.lastPathComponent)
+        try snapshotting.diffing.toData(difference).write(to: differenceSnapshotFileUrl)
+      }
 
       if !attachments.isEmpty {
         #if !os(Linux) && !os(Windows)
