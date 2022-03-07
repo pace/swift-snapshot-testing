@@ -12,6 +12,8 @@ public struct Diffing<Value> {
   /// Compares two values. If the values do not match, returns a failure message and artifacts describing the failure.
   public var diff: (Value, Value) -> (String, [XCTAttachment])?
 
+  public var difference: ((Value, Value) -> Value)?
+
   /// Creates a new `Diffing` on `Value`.
   ///
   /// - Parameters:
@@ -25,10 +27,12 @@ public struct Diffing<Value> {
   public init(
     toData: @escaping (_ value: Value) -> Data,
     fromData: @escaping (_ data: Data) -> Value,
-    diff: @escaping (_ lhs: Value, _ rhs: Value) -> (String, [XCTAttachment])?
+    diff: @escaping (_ lhs: Value, _ rhs: Value) -> (String, [XCTAttachment])?,
+    difference: ((_ lhs: Value, _ rhs: Value) -> Value)? = nil
     ) {
     self.toData = toData
     self.fromData = fromData
     self.diff = diff
+    self.difference = difference
   }
 }
