@@ -176,21 +176,28 @@ public func verifySnapshot<Value, Format>(
     let recording = recording || isRecording
 
     do {
-      let fileUrl = URL(fileURLWithPath: "\(file)", isDirectory: false)
+      var fileUrl = URL(fileURLWithPath: "\(file)", isDirectory: false)
       let fileName = fileUrl.deletingPathExtension().lastPathComponent
+      let sanitizedFileName = sanitizePathComponent(fileName)
+      let fileNamePrefix = sanitizedFileName.prefix(1).lowercased() + sanitizedFileName.dropFirst()
 
-      let snapshotDirectoryUrl = snapshotDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
-        ?? fileUrl
-          .deletingLastPathComponent()
-          .appendingPathComponent("Snapshots")
-          .appendingPathComponent(fileName)
+      while(fileUrl.lastPathComponent != "PACEDriveSnapshotTests") {
+        fileUrl = fileUrl.deletingLastPathComponent()
+      }
+
+      let projectDirectoryUrl = snapshotDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? fileUrl
+
+      let snapshotReferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotReferences")
+      let snapshotAdditionsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotAdditions")
+      let snapshotFailuresUrl = projectDirectoryUrl.appendingPathComponent("SnapshotFailure")
+      let snapshotDifferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotDifferences")
 
       let identifier: String
       if let name = name {
         identifier = sanitizePathComponent(name)
       } else {
         let counter = counterQueue.sync { () -> Int in
-          let key = snapshotDirectoryUrl.appendingPathComponent(testName)
+          let key = snapshotReferencesUrl.appendingPathComponent(testName)
           counterMap[key, default: 0] += 1
           return counterMap[key]!
         }
@@ -198,11 +205,10 @@ public func verifySnapshot<Value, Format>(
       }
 
       let testName = sanitizePathComponent(testName)
-      let snapshotFileUrl = snapshotDirectoryUrl
-        .appendingPathComponent("\(testName).\(identifier)")
-        .appendingPathExtension(snapshotting.pathExtension ?? "")
+      let snapshotFileName = "\(fileNamePrefix).\(testName).\(identifier)"
+
       let fileManager = FileManager.default
-      try fileManager.createDirectory(at: snapshotDirectoryUrl, withIntermediateDirectories: true)
+      try fileManager.createDirectory(at: snapshotReferencesUrl, withIntermediateDirectories: true)
 
       let tookSnapshot = XCTestExpectation(description: "Took snapshot")
       var optionalDiffable: Format?
@@ -232,27 +238,22 @@ public func verifySnapshot<Value, Format>(
       guard var diffable = optionalDiffable else {
         return "Couldn't snapshot value"
       }
+
+      let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
       
-      guard !recording, fileManager.fileExists(atPath: snapshotFileUrl.path) else {
-        try snapshotting.diffing.toData(diffable).write(to: snapshotFileUrl)
-        return recording
-          ? """
-            Record mode is on. Turn record mode off and re-run "\(testName)" to test against the newly-recorded snapshot.
-
-            open "\(snapshotFileUrl.path)"
-
-            Recorded snapshot: …
+      guard !recording, fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
+        try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
+        return
             """
-          : """
-            No reference was found on disk. Automatically recorded snapshot: …
+            No reference was found on disk. A new snapshot has been created to the "SnapshotAdditions" folder.
 
-            open "\(snapshotFileUrl.path)"
+            open "SnapshotAdditions" folder and add the content to the "SnapshotReferences" folder
 
-            Re-run "\(testName)" to test against the newly-recorded snapshot.
+            Then Re-run "\(testName)" to test against the newly-recorded snapshot.
             """
       }
 
-      let data = try Data(contentsOf: snapshotFileUrl)
+      let data = try Data(contentsOf: snapshotReferenceFileUrl)
       let reference = snapshotting.diffing.fromData(data)
 
       #if os(iOS) || os(tvOS)
@@ -262,28 +263,16 @@ public func verifySnapshot<Value, Format>(
       }
       #endif
 
-      guard let (failure, attachments) = snapshotting.diffing.diff(reference, diffable) else {
+      guard let (_, attachments) = snapshotting.diffing.diff(reference, diffable) else {
         return nil
       }
 
       // MARK: - Failed snapshots
-      let failedSnapshotUrl = URL(
-        fileURLWithPath: ProcessInfo.processInfo.environment["FAILED_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true
-      )
-      let failedSnapshotSubUrl = failedSnapshotUrl.appendingPathComponent(fileName)
-      try fileManager.createDirectory(at: failedSnapshotSubUrl, withIntermediateDirectories: true)
-      let failedSnapshotFileUrl = failedSnapshotSubUrl.appendingPathComponent(snapshotFileUrl.lastPathComponent)
-      try snapshotting.diffing.toData(diffable).write(to: failedSnapshotFileUrl)
+      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotFailuresUrl, snapshotFileName: snapshotFileName)
 
       // MARK: - Diff snapshots
       if let difference = snapshotting.diffing.difference?(reference, diffable) {
-        let differenceSnapshotUrl = URL(
-          fileURLWithPath: ProcessInfo.processInfo.environment["DIFF_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true
-        )
-        let differenceSnapshotSubUrl = differenceSnapshotUrl.appendingPathComponent(fileName)
-        try fileManager.createDirectory(at: differenceSnapshotSubUrl, withIntermediateDirectories: true)
-        let differenceSnapshotFileUrl = differenceSnapshotSubUrl.appendingPathComponent(snapshotFileUrl.lastPathComponent)
-        try snapshotting.diffing.toData(difference).write(to: differenceSnapshotFileUrl)
+        try writeToDirectory(snapshotting: snapshotting, format: difference, directoryUrl: snapshotDifferencesUrl, snapshotFileName: snapshotFileName)
       }
 
       if !attachments.isEmpty {
@@ -298,36 +287,16 @@ public func verifySnapshot<Value, Format>(
         #endif
       }
 
-      let diffMessage = diffTool
-        .map { "\($0) \"\(snapshotFileUrl.path)\" \"\(failedSnapshotFileUrl.path)\"" }
-        ?? """
-        @\(minus)
-        "\(snapshotFileUrl.path)"
-        @\(plus)
-        "\(failedSnapshotFileUrl.path)"
-
-        To configure output for a custom diff tool, like Kaleidoscope:
-
-            SnapshotTesting.diffTool = "ksdiff"
-        """
-
-      let failureMessage: String
-      if let name = name {
-        failureMessage = "Snapshot \"\(name)\" does not match reference."
-      } else {
-        failureMessage = "Snapshot does not match reference."
-      }
-
-      return """
-      \(failureMessage)
-
-      \(diffMessage)
-
-      \(failure.trimmingCharacters(in: .whitespacesAndNewlines))
-      """
+      return nil
     } catch {
       return error.localizedDescription
     }
+}
+
+private func writeToDirectory<Value, Format>(snapshotting: Snapshotting<Value, Format>, format: Format, directoryUrl: URL, snapshotFileName: String) throws {
+  try FileManager.default.createDirectory(at: directoryUrl, withIntermediateDirectories: true)
+  let snapshotFileUrl = directoryUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
+  try snapshotting.diffing.toData(format).write(to: snapshotFileUrl)
 }
 
 // MARK: - Private
