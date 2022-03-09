@@ -189,6 +189,7 @@ public func verifySnapshot<Value, Format>(
       let projectDirectoryUrl = snapshotDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? fileUrl
 
       let snapshotReferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotReferences")
+      let snapshotTargetsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotTargets")
       let snapshotAdditionsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotAdditions")
       let snapshotFailuresUrl = projectDirectoryUrl.appendingPathComponent("SnapshotFailure")
       let snapshotDifferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotDifferences")
@@ -239,6 +240,9 @@ public func verifySnapshot<Value, Format>(
       guard var diffable = optionalDiffable else {
         return "Couldn't snapshot value"
       }
+
+      // MARK: - Target snapshots
+      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotTargetsUrl, snapshotFileName: snapshotFileName)
 
       let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
       
