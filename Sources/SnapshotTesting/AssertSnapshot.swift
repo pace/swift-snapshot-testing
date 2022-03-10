@@ -190,7 +190,7 @@ public func verifySnapshot<Value, Format>(
       let snapshotReferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotReferences")
       let snapshotTargetsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotTargets")
       let snapshotAdditionsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotAdditions")
-      let snapshotFailuresUrl = projectDirectoryUrl.appendingPathComponent("SnapshotFailure")
+      let snapshotChangesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotChanges")
       let snapshotDifferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotDifferences")
 
       let identifier: String
@@ -271,8 +271,8 @@ public func verifySnapshot<Value, Format>(
         return nil
       }
 
-      // MARK: - Failed snapshots
-      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotFailuresUrl, snapshotFileName: snapshotFileName)
+      // MARK: - Changed snapshots
+      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotChangesUrl, snapshotFileName: snapshotFileName)
 
       // MARK: - Diff snapshots
       if let difference = snapshotting.diffing.difference?(reference, diffable) {
