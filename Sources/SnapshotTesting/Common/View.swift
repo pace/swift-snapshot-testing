@@ -528,6 +528,7 @@ extension UITraitCollection {
   public static func iPhone8(_ orientation: ViewImageConfig.Orientation)
     -> UITraitCollection {
       let base: [UITraitCollection] = [
+        .init(displayGamut: .SRGB),
         .init(forceTouchCapability: .available),
         .init(layoutDirection: .leftToRight),
         .init(preferredContentSizeCategory: .medium),
@@ -554,6 +555,7 @@ extension UITraitCollection {
   public static func iPhone8Plus(_ orientation: ViewImageConfig.Orientation)
     -> UITraitCollection {
       let base: [UITraitCollection] = [
+        .init(displayGamut: .SRGB),
         .init(forceTouchCapability: .available),
         .init(layoutDirection: .leftToRight),
         .init(preferredContentSizeCategory: .medium),
@@ -580,6 +582,7 @@ extension UITraitCollection {
   public static func iPhoneX(_ orientation: ViewImageConfig.Orientation)
     -> UITraitCollection {
       let base: [UITraitCollection] = [
+        .init(displayGamut: .SRGB),
         .init(forceTouchCapability: .available),
         .init(layoutDirection: .leftToRight),
         .init(preferredContentSizeCategory: .medium),
@@ -606,6 +609,7 @@ extension UITraitCollection {
   public static func iPhoneXr(_ orientation: ViewImageConfig.Orientation)
     -> UITraitCollection {
       let base: [UITraitCollection] = [
+        .init(displayGamut: .SRGB),
         .init(forceTouchCapability: .unavailable),
         .init(layoutDirection: .leftToRight),
         .init(preferredContentSizeCategory: .medium),
@@ -632,6 +636,7 @@ extension UITraitCollection {
   public static func iPhoneXsMax(_ orientation: ViewImageConfig.Orientation)
     -> UITraitCollection {
       let base: [UITraitCollection] = [
+        .init(displayGamut: .SRGB),
         .init(forceTouchCapability: .available),
         .init(layoutDirection: .leftToRight),
         .init(preferredContentSizeCategory: .medium),
@@ -658,6 +663,7 @@ extension UITraitCollection {
   public static func iPhone12(_ orientation: ViewImageConfig.Orientation)
   -> UITraitCollection {
     let base: [UITraitCollection] = [
+      .init(displayGamut: .SRGB),
       .init(forceTouchCapability: .available),
       .init(layoutDirection: .leftToRight),
       .init(preferredContentSizeCategory: .medium),
@@ -684,6 +690,7 @@ extension UITraitCollection {
   public static func iPhone12ProMax(_ orientation: ViewImageConfig.Orientation)
   -> UITraitCollection {
     let base: [UITraitCollection] = [
+      .init(displayGamut: .SRGB),
       .init(forceTouchCapability: .available),
       .init(layoutDirection: .leftToRight),
       .init(preferredContentSizeCategory: .medium),
@@ -709,6 +716,7 @@ extension UITraitCollection {
 
   public static func iPhone13(_ orientation: ViewImageConfig.Orientation) -> UITraitCollection {
     let base: [UITraitCollection] = [
+      .init(displayGamut: .SRGB),
       .init(forceTouchCapability: .available),
       .init(layoutDirection: .leftToRight),
       .init(preferredContentSizeCategory: .medium),
@@ -734,6 +742,7 @@ extension UITraitCollection {
 
   public static func iPhone13ProMax(_ orientation: ViewImageConfig.Orientation) -> UITraitCollection {
     let base: [UITraitCollection] = [
+      .init(displayGamut: .SRGB),
       .init(forceTouchCapability: .available),
       .init(layoutDirection: .leftToRight),
       .init(preferredContentSizeCategory: .medium),
