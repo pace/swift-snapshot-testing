@@ -267,7 +267,7 @@ public func verifySnapshot<Value, Format>(
       }
       #endif
 
-      guard let (_, attachments) = snapshotting.diffing.diff(reference, diffable) else {
+      guard let (failure, attachments) = snapshotting.diffing.diff(reference, diffable) else {
         return nil
       }
 
@@ -291,7 +291,18 @@ public func verifySnapshot<Value, Format>(
         #endif
       }
 
-      return nil
+      let failureMessage: String
+      if let name = name {
+        failureMessage = "Snapshot \"\(name)\" does not match reference."
+      } else {
+        failureMessage = "Snapshot does not match reference."
+      }
+
+      return """
+      \(failureMessage)
+
+      \(failure.trimmingCharacters(in: .whitespacesAndNewlines))
+      """
     } catch {
       return error.localizedDescription
     }
