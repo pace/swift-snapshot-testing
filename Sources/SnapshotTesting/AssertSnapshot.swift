@@ -245,15 +245,22 @@ public func verifySnapshot<Value, Format>(
 
       let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
       
-      guard !recording, fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
-        try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
+      guard fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
+        if(recording) {
+          try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
+        }
         return
+            recording ?
             """
             No reference was found on disk. A new snapshot has been created to the "SnapshotAdditions" folder.
 
             open "SnapshotAdditions" folder and add the content to the "SnapshotReferences" folder
 
             Then Re-run "\(testName)" to test against the newly-recorded snapshot.
+            """
+            :
+            """
+            No reference was found on disk. Re-run with recording enabled.
             """
       }
 
@@ -271,12 +278,14 @@ public func verifySnapshot<Value, Format>(
         return nil
       }
 
-      // MARK: - Changed snapshots
-      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotChangesUrl, snapshotFileName: snapshotFileName)
-
-      // MARK: - Diff snapshots
-      if let difference = snapshotting.diffing.difference?(reference, diffable) {
-        try writeToDirectory(snapshotting: snapshotting, format: difference, directoryUrl: snapshotDifferencesUrl, snapshotFileName: snapshotFileName)
+      if(recording {
+        // MARK: - Changed snapshots
+        try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotChangesUrl, snapshotFileName: snapshotFileName)
+  
+        // MARK: - Diff snapshots
+        if let difference = snapshotting.diffing.difference?(reference, diffable) {
+          try writeToDirectory(snapshotting: snapshotting, format: difference, directoryUrl: snapshotDifferencesUrl, snapshotFileName: snapshotFileName)
+        }
       }
 
       if !attachments.isEmpty {
