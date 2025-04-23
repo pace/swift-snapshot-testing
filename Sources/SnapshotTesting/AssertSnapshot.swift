@@ -278,7 +278,7 @@ public func verifySnapshot<Value, Format>(
         return nil
       }
 
-      if(recording {
+      if(recording) {
         // MARK: - Changed snapshots
         try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotChangesUrl, snapshotFileName: snapshotFileName)
   
