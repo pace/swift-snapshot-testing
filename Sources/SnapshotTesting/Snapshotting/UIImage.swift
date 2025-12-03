@@ -26,28 +26,31 @@
       } else {
         imageScale = UIScreen.main.scale
       }
-
-      return Diffing(
-        toData: { $0.pngData() ?? emptyImage().pngData()! },
-        fromData: { UIImage(data: $0, scale: imageScale)! }
-      ) { old, new in
-        guard
-          let message = compare(
-            old, new, precision: precision, perceptualPrecision: perceptualPrecision)
-        else { return nil }
-        let difference = SnapshotTesting.diff(old, new)
-        let oldAttachment = XCTAttachment(image: old)
-        oldAttachment.name = "reference"
-        let isEmptyImage = new.size == .zero
-        let newAttachment = XCTAttachment(image: isEmptyImage ? emptyImage() : new)
-        newAttachment.name = "failure"
-        let differenceAttachment = XCTAttachment(image: difference)
-        differenceAttachment.name = "difference"
-        return (
-          message,
-          [oldAttachment, newAttachment, differenceAttachment]
-        )
-      }
+        
+        return Diffing(
+              toData: { $0.pngData() ?? emptyImage().pngData()! },
+              fromData: { UIImage(data: $0, scale: imageScale)! },
+              diff: { old, new in
+                  guard (compare(old, new, precision: precision, perceptualPrecision: perceptualPrecision) == nil) else { return nil }
+                let difference = SnapshotTesting.diff(old, new)
+                let message = new.size == old.size
+                  ? "Newly-taken snapshot does not match reference."
+                  : "Newly-taken snapshot@\(new.size) does not match reference@\(old.size)."
+                let oldAttachment = XCTAttachment(image: old)
+                oldAttachment.name = "reference"
+                let newAttachment = XCTAttachment(image: new)
+                newAttachment.name = "failure"
+                let differenceAttachment = XCTAttachment(image: difference)
+                differenceAttachment.name = "difference"
+                return (
+                  message,
+                  [oldAttachment, newAttachment, differenceAttachment]
+                )
+              },
+              difference: { old, new in
+                let difference = SnapshotTesting.diff(old, new)
+                return difference
+              })
     }
 
     /// Used when the image size has no width or no height to generated the default empty image
