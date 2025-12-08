@@ -372,8 +372,8 @@ public func verifySnapshot<Value, Format>(
 
       func recordSnapshot(writeToDisk: Bool) throws {
         let snapshotData = snapshotting.diffing.toData(diffable)
-
-        let snapshotFileUrl = snapshotTargetsUrl.appendingPathComponent(snapshotFileName + ".png")
+        let fileExtension = snapshotting.pathExtension ?? "png"
+        let snapshotFileUrl = snapshotTargetsUrl.appendingPathComponent(snapshotFileName + ".\(fileExtension)")
 
         try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotTargetsUrl, snapshotFileName: snapshotFileName)
 
@@ -418,23 +418,14 @@ public func verifySnapshot<Value, Format>(
       let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
 
       guard fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
-        if record == .never {
-          try recordSnapshot(writeToDisk: false)
+        try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
+        return """
+          Record mode is on. Automatically recorded snapshot: …
 
-          return """
-            No reference was found on disk. New snapshot was not recorded because recording is disabled
-            """
-        } else {
-          try recordSnapshot(writeToDisk: true)
+          open "\(snapshotFileName)"
 
-          return """
-            No reference was found on disk. Automatically recorded snapshot: …
-
-            open "\(snapshotReferenceFileUrl.absoluteString)"
-
-            Re-run "\(testName)" to assert against the newly-recorded snapshot.
-            """
-        }
+          Turn record mode off and re-run "\(testName)" to assert against the newly-recorded snapshot
+          """
       }
 
       let data = try Data(contentsOf: snapshotReferenceFileUrl)
