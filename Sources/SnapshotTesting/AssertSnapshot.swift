@@ -297,213 +297,212 @@ public func verifySnapshot<Value, Format>(
     (recording == true ? .all : recording == false ? .missing : nil)
     ?? SnapshotTestingConfiguration.current?.record
     ?? _record
-  return withSnapshotTesting(record: record) { () -> String? in
-    do {
-      var fileUrl = URL(fileURLWithPath: "\(filePath)", isDirectory: false)
-      let fileName = fileUrl.deletingPathExtension().lastPathComponent
-      let sanitizedFileName = sanitizePathComponent(fileName)
-      let fileNamePrefix = sanitizedFileName.prefix(1).lowercased() + sanitizedFileName.dropFirst()
+  do {
+    var fileUrl = URL(fileURLWithPath: "\(filePath)", isDirectory: false)
+    let fileName = fileUrl.deletingPathExtension().lastPathComponent
+    let sanitizedFileName = sanitizePathComponent(fileName)
+    let fileNamePrefix = sanitizedFileName.prefix(1).lowercased() + sanitizedFileName.dropFirst()
 
 
-      #if os(Android)
-        // When running tests on Android, the CI script copies the Tests/SnapshotTestingTests/__Snapshots__ up to the temporary folder
-        let snapshotsBaseUrl = URL(
-          fileURLWithPath: "/data/local/tmp/android-xctest", isDirectory: true)
-      #else
-        let snapshotsBaseUrl = fileUrl.deletingLastPathComponent()
-      #endif
+    #if os(Android)
+      // When running tests on Android, the CI script copies the Tests/SnapshotTestingTests/__Snapshots__ up to the temporary folder
+      let snapshotsBaseUrl = URL(
+        fileURLWithPath: "/data/local/tmp/android-xctest", isDirectory: true)
+    #else
+      let snapshotsBaseUrl = fileUrl.deletingLastPathComponent()
+    #endif
 
-      while(fileUrl.lastPathComponent != "PACEDriveSnapshotTests") {
-        fileUrl = fileUrl.deletingLastPathComponent()
-      }
+    while(fileUrl.lastPathComponent != "PACEDriveSnapshotTests") {
+      fileUrl = fileUrl.deletingLastPathComponent()
+    }
 
-      let projectDirectoryUrl = snapshotDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? fileUrl
+    let projectDirectoryUrl = snapshotDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? fileUrl
 
-      let snapshotReferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotReferences")
-      let snapshotTargetsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotTargets")
-      let snapshotAdditionsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotAdditions")
-      let snapshotChangesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotChanges")
-      let snapshotDifferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotDifferences")
+    let snapshotReferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotReferences")
+    let snapshotTargetsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotTargets")
+    let snapshotAdditionsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotAdditions")
+    let snapshotChangesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotChanges")
+    let snapshotDifferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotDifferences")
 
-      let identifier: String
-      if let name = name {
-        identifier = sanitizePathComponent(name)
-      } else {
-        identifier = String(
-          counter.next(for: snapshotReferencesUrl.appendingPathComponent(testName).absoluteString)
-        )
-      }
+    let identifier: String
+    if let name = name {
+      identifier = sanitizePathComponent(name)
+    } else {
+      identifier = String(
+        counter.next(for: snapshotReferencesUrl.appendingPathComponent(testName).absoluteString)
+      )
+    }
 
-      let testName = sanitizePathComponent(testName)
-      // var snapshotFileUrl = snapshotReferencesUrl.appendingPathComponent("\(testName).\(identifier)")
-      let snapshotFileName = "\(fileNamePrefix).\(testName).\(identifier)"
-        
-      let fileManager = FileManager.default
-      try fileManager.createDirectory(at: snapshotReferencesUrl, withIntermediateDirectories: true)
+    let testName = sanitizePathComponent(testName)
+    // var snapshotFileUrl = snapshotReferencesUrl.appendingPathComponent("\(testName).\(identifier)")
+    let snapshotFileName = "\(fileNamePrefix).\(testName).\(identifier)"
+      
+    let fileManager = FileManager.default
+    try fileManager.createDirectory(at: snapshotReferencesUrl, withIntermediateDirectories: true)
 
-      let tookSnapshot = XCTestExpectation(description: "Took snapshot")
-      var optionalDiffable: Format?
-      snapshotting.snapshot(try value()).run { b in
-        optionalDiffable = b
-        tookSnapshot.fulfill()
-      }
-      let result = XCTWaiter.wait(for: [tookSnapshot], timeout: timeout)
-      switch result {
-      case .completed:
-        break
-      case .timedOut:
-        return """
-          Exceeded timeout of \(timeout) seconds waiting for snapshot.
+    let tookSnapshot = XCTestExpectation(description: "Took snapshot")
+    var optionalDiffable: Format?
+    snapshotting.snapshot(try value()).run { b in
+      optionalDiffable = b
+      tookSnapshot.fulfill()
+    }
+    let result = XCTWaiter.wait(for: [tookSnapshot], timeout: timeout)
+    switch result {
+    case .completed:
+      break
+    case .timedOut:
+      return """
+        Exceeded timeout of \(timeout) seconds waiting for snapshot.
 
-          This can happen when an asynchronously rendered view (like a web view) has not loaded. \
-          Ensure that every subview of the view hierarchy has loaded to avoid timeouts, or, if a \
-          timeout is unavoidable, consider setting the "timeout" parameter of "assertSnapshot" to \
-          a higher value.
-          """
-      case .incorrectOrder, .invertedFulfillment, .interrupted:
-        return "Couldn't snapshot value"
-      @unknown default:
-        return "Couldn't snapshot value"
-      }
+        This can happen when an asynchronously rendered view (like a web view) has not loaded. \
+        Ensure that every subview of the view hierarchy has loaded to avoid timeouts, or, if a \
+        timeout is unavoidable, consider setting the "timeout" parameter of "assertSnapshot" to \
+        a higher value.
+        """
+    case .incorrectOrder, .invertedFulfillment, .interrupted:
+      return "Couldn't snapshot value"
+    @unknown default:
+      return "Couldn't snapshot value"
+    }
 
-      guard var diffable = optionalDiffable else {
-        return "Couldn't snapshot value"
-      }
+    guard var diffable = optionalDiffable else {
+      return "Couldn't snapshot value"
+    }
 
-      func recordSnapshot(writeToDisk: Bool) throws {
-        let snapshotData = snapshotting.diffing.toData(diffable)
-        let fileExtension = snapshotting.pathExtension ?? "png"
-        let snapshotFileUrl = snapshotTargetsUrl.appendingPathComponent(snapshotFileName + ".\(fileExtension)")
+    func recordSnapshot(writeToDisk: Bool) throws {
+      let snapshotData = snapshotting.diffing.toData(diffable)
+      let fileExtension = snapshotting.pathExtension ?? "png"
+      let snapshotFileUrl = snapshotTargetsUrl.appendingPathComponent(snapshotFileName + ".\(fileExtension)")
 
-        try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotTargetsUrl, snapshotFileName: snapshotFileName)
+      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotTargetsUrl, snapshotFileName: snapshotFileName)
 
-        #if !os(Android) && !os(Linux) && !os(Windows)
-          if !isSwiftTesting,
-            ProcessInfo.processInfo.environment.keys.contains("__XCODE_BUILT_PRODUCTS_DIR_PATHS")
-          {
-            XCTContext.runActivity(named: "Attached Recorded Snapshot") { activity in
-              if writeToDisk {
-                // Snapshot was written to disk. Create attachment from file
-                let attachment = XCTAttachment(contentsOfFile: snapshotFileUrl)
-                activity.add(attachment)
-              } else {
-                // Snapshot was not written to disk. Create attachment from data and path extension
-                let typeIdentifier = snapshotting.pathExtension.flatMap(
-                  uniformTypeIdentifier(fromExtension:))
-
-                let attachment = XCTAttachment(
-                  uniformTypeIdentifier: typeIdentifier,
-                  name: snapshotFileUrl.lastPathComponent,
-                  payload: snapshotData
-                )
-
-                activity.add(attachment)
-              }
-            }
-          }
-        #endif
-      }
-
-      if record == .all {
-        try recordSnapshot(writeToDisk: true)
-
-        return """
-          Record mode is on. Automatically recorded snapshot: …
-
-          open "\(snapshotFileName)"
-
-          Turn record mode off and re-run "\(testName)" to assert against the newly-recorded snapshot
-          """
-      }
-      let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
-
-      guard fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
-        try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
-        return """
-          Record mode is on. Automatically recorded snapshot: …
-
-          open "\(snapshotFileName)"
-
-          Turn record mode off and re-run "\(testName)" to assert against the newly-recorded snapshot
-          """
-      }
-
-      let data = try Data(contentsOf: snapshotReferenceFileUrl)
-      let reference = snapshotting.diffing.fromData(data)
-
-      #if os(iOS) || os(tvOS)
-        // If the image generation fails for the diffable part and the reference was empty, use the reference
-        if let localDiff = diffable as? UIImage,
-          let refImage = reference as? UIImage,
-          localDiff.size == .zero && refImage.size == .zero
+      #if !os(Android) && !os(Linux) && !os(Windows)
+        if !isSwiftTesting,
+          ProcessInfo.processInfo.environment.keys.contains("__XCODE_BUILT_PRODUCTS_DIR_PATHS")
         {
-          diffable = reference
-        }
-      #endif
+          XCTContext.runActivity(named: "Attached Recorded Snapshot") { activity in
+            if writeToDisk {
+              // Snapshot was written to disk. Create attachment from file
+              let attachment = XCTAttachment(contentsOfFile: snapshotFileUrl)
+              activity.add(attachment)
+            } else {
+              // Snapshot was not written to disk. Create attachment from data and path extension
+              let typeIdentifier = snapshotting.pathExtension.flatMap(
+                uniformTypeIdentifier(fromExtension:))
 
-      guard let (failure, attachments) = snapshotting.diffing.diff(reference, diffable) else {
-        return nil
-      }
+              let attachment = XCTAttachment(
+                uniformTypeIdentifier: typeIdentifier,
+                name: snapshotFileUrl.lastPathComponent,
+                payload: snapshotData
+              )
 
-      let artifactsUrl = URL(
-        fileURLWithPath: ProcessInfo.processInfo.environment["SNAPSHOT_ARTIFACTS"]
-          ?? NSTemporaryDirectory(), isDirectory: true
-      )
-      let artifactsSubUrl = artifactsUrl.appendingPathComponent(fileName)
-      try fileManager.createDirectory(at: artifactsSubUrl, withIntermediateDirectories: true)
-      let failedSnapshotFileUrl = artifactsSubUrl.appendingPathComponent(
-        snapshotReferenceFileUrl.lastPathComponent)
-      try snapshotting.diffing.toData(diffable).write(to: failedSnapshotFileUrl)
-        
-        // MARK: - Changed snapshots
-        try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotChangesUrl, snapshotFileName: snapshotFileName)
-        
-        // MARK: - Diff snapshots
-        if let difference = snapshotting.diffing.difference?(reference, diffable) {
-            try writeToDirectory(snapshotting: snapshotting, format: difference, directoryUrl: snapshotDifferencesUrl, snapshotFileName: snapshotFileName)
-        }
-
-      if !attachments.isEmpty {
-        #if !os(Linux) && !os(Android) && !os(Windows)
-          if ProcessInfo.processInfo.environment.keys.contains("__XCODE_BUILT_PRODUCTS_DIR_PATHS"),
-            !isSwiftTesting
-          {
-            XCTContext.runActivity(named: "Attached Failure Diff") { activity in
-              attachments.forEach {
-                activity.add($0)
-              }
+              activity.add(attachment)
             }
           }
-        #endif
-      }
+        }
+      #endif
+    }
 
-      let diffMessage = (SnapshotTestingConfiguration.current?.diffTool ?? _diffTool)(
-        currentFilePath: snapshotReferenceFileUrl.path,
-        failedFilePath: failedSnapshotFileUrl.path
-      )
-
-      var failureMessage: String
-      if let name = name {
-        failureMessage = "Snapshot \"\(name)\" does not match reference."
-      } else {
-        failureMessage = "Snapshot does not match reference."
-      }
-
-      if record == .failed {
-        try recordSnapshot(writeToDisk: true)
-        failureMessage += " A new snapshot was automatically recorded."
-      }
+    if record == .all {
+      try recordSnapshot(writeToDisk: true)
 
       return """
-        \(failureMessage)
+        Record mode is on. Automatically recorded snapshot: …
 
-        \(diffMessage)
+        open "\(snapshotFileName)"
 
-        \(failure.trimmingCharacters(in: .whitespacesAndNewlines))
+        Turn record mode off and re-run "\(testName)" to assert against the newly-recorded snapshot
         """
-    } catch {
-      return error.localizedDescription
     }
+    let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
+
+    guard fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
+      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
+      return """
+        Record mode is on. Automatically recorded snapshot: …
+
+        open "\(snapshotFileName)"
+
+        Turn record mode off and re-run "\(testName)" to assert against the newly-recorded snapshot
+        """
+    }
+
+    let data = try Data(contentsOf: snapshotReferenceFileUrl)
+    let reference = snapshotting.diffing.fromData(data)
+
+    #if os(iOS) || os(tvOS)
+      // If the image generation fails for the diffable part and the reference was empty, use the reference
+      if let localDiff = diffable as? UIImage,
+        let refImage = reference as? UIImage,
+        localDiff.size == .zero && refImage.size == .zero
+      {
+        diffable = reference
+      }
+    #endif
+
+    guard let (failure, attachments) = snapshotting.diffing.diff(reference, diffable) else {
+      return nil
+    }
+
+    let artifactsUrl = URL(
+      fileURLWithPath: ProcessInfo.processInfo.environment["SNAPSHOT_ARTIFACTS"]
+        ?? NSTemporaryDirectory(), isDirectory: true
+    )
+    let artifactsSubUrl = artifactsUrl.appendingPathComponent(fileName)
+    try fileManager.createDirectory(at: artifactsSubUrl, withIntermediateDirectories: true)
+    let failedSnapshotFileUrl = artifactsSubUrl.appendingPathComponent(
+      snapshotReferenceFileUrl.lastPathComponent)
+    try snapshotting.diffing.toData(diffable).write(to: failedSnapshotFileUrl)
+    if record == .all {
+      // MARK: - Changed snapshots
+      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotChangesUrl, snapshotFileName: snapshotFileName)
+      
+      // MARK: - Diff snapshots
+      if let difference = snapshotting.diffing.difference?(reference, diffable) {
+        try writeToDirectory(snapshotting: snapshotting, format: difference, directoryUrl: snapshotDifferencesUrl, snapshotFileName: snapshotFileName)
+      }
+    }
+
+    if !attachments.isEmpty {
+      #if !os(Linux) && !os(Android) && !os(Windows)
+        if ProcessInfo.processInfo.environment.keys.contains("__XCODE_BUILT_PRODUCTS_DIR_PATHS"),
+          !isSwiftTesting
+        {
+          XCTContext.runActivity(named: "Attached Failure Diff") { activity in
+            attachments.forEach {
+              activity.add($0)
+            }
+          }
+        }
+      #endif
+    }
+
+    let diffMessage = (SnapshotTestingConfiguration.current?.diffTool ?? _diffTool)(
+      currentFilePath: snapshotReferenceFileUrl.path,
+      failedFilePath: failedSnapshotFileUrl.path
+    )
+
+    var failureMessage: String
+    if let name = name {
+      failureMessage = "Snapshot \"\(name)\" does not match reference."
+    } else {
+      failureMessage = "Snapshot does not match reference."
+    }
+
+    if record == .failed {
+      try recordSnapshot(writeToDisk: true)
+      failureMessage += " A new snapshot was automatically recorded."
+    }
+
+    return """
+      \(failureMessage)
+
+      \(diffMessage)
+
+      \(failure.trimmingCharacters(in: .whitespacesAndNewlines))
+      """
+  } catch {
+    return error.localizedDescription
   }
 }
 
