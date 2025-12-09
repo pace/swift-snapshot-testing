@@ -328,9 +328,12 @@ public func verifySnapshot<Value, Format>(
     if let name = name {
       identifier = sanitizePathComponent(name)
     } else {
-      identifier = String(
-        counter.next(for: snapshotReferencesUrl.appendingPathComponent(testName).absoluteString)
-      )
+      let counter = counterQueue.sync { () -> Int in
+        let key = snapshotReferencesUrl.appendingPathComponent(testName)
+        counterMap[key, default: 0] += 1
+        return counterMap[key]!
+      }
+      identifier = String(counter)
     }
 
     let testName = sanitizePathComponent(testName)
@@ -494,6 +497,8 @@ private var counter: File.Counter {
 }
 
 private let _counter = File.Counter()
+private let counterQueue = DispatchQueue(label: "co.pointfree.SnapshotTesting.counter")
+private var counterMap: [URL: Int] = [:]
 
 func sanitizePathComponent(_ string: String) -> String {
   return
