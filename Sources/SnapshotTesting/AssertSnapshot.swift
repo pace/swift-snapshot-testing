@@ -417,7 +417,9 @@ public func verifySnapshot<Value, Format>(
     let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
 
     guard fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
-      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
+      if record == .all {
+        try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
+      }
       return """
         Record mode is on. Automatically recorded snapshot: …
 
