@@ -368,7 +368,8 @@ public func verifySnapshot<Value, Format>(
     guard var diffable = optionalDiffable else {
       return "Couldn't snapshot value"
     }
-
+    try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotTargetsUrl, snapshotFileName: snapshotFileName)
+    
     if record == .all {
 
       return """
