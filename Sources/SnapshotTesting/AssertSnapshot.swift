@@ -404,7 +404,7 @@ public func verifySnapshot<Value, Format>(
     }
 
     if record == .all {
-      try recordSnapshot(writeToDisk: true)
+      try recordSnapshot(writeToDisk: false)
 
       return """
         Record mode is on. Automatically recorded snapshot: …
