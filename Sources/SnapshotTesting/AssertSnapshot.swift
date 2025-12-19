@@ -369,42 +369,7 @@ public func verifySnapshot<Value, Format>(
       return "Couldn't snapshot value"
     }
 
-    func recordSnapshot(writeToDisk: Bool) throws {
-      let snapshotData = snapshotting.diffing.toData(diffable)
-      let fileExtension = snapshotting.pathExtension ?? "png"
-      let snapshotFileUrl = snapshotTargetsUrl.appendingPathComponent(snapshotFileName + ".\(fileExtension)")
-
-      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotTargetsUrl, snapshotFileName: snapshotFileName)
-
-      #if !os(Android) && !os(Linux) && !os(Windows)
-        if !isSwiftTesting,
-          ProcessInfo.processInfo.environment.keys.contains("__XCODE_BUILT_PRODUCTS_DIR_PATHS")
-        {
-          XCTContext.runActivity(named: "Attached Recorded Snapshot") { activity in
-            if writeToDisk {
-              // Snapshot was written to disk. Create attachment from file
-              let attachment = XCTAttachment(contentsOfFile: snapshotFileUrl)
-              activity.add(attachment)
-            } else {
-              // Snapshot was not written to disk. Create attachment from data and path extension
-              let typeIdentifier = snapshotting.pathExtension.flatMap(
-                uniformTypeIdentifier(fromExtension:))
-
-              let attachment = XCTAttachment(
-                uniformTypeIdentifier: typeIdentifier,
-                name: snapshotFileUrl.lastPathComponent,
-                payload: snapshotData
-              )
-
-              activity.add(attachment)
-            }
-          }
-        }
-      #endif
-    }
-
     if record == .all {
-      try recordSnapshot(writeToDisk: false)
 
       return """
         Record mode is on. Automatically recorded snapshot: …
@@ -492,7 +457,6 @@ public func verifySnapshot<Value, Format>(
     }
 
     if record == .failed {
-      try recordSnapshot(writeToDisk: true)
       failureMessage += " A new snapshot was automatically recorded."
     }
 
