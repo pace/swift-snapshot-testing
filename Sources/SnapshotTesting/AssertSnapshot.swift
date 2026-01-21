@@ -293,10 +293,6 @@ public func verifySnapshot<Value, Format>(
     CleanCounterBetweenTestCases.registerIfNeeded()
   #endif
 
-  let record =
-    (recording == true ? .all : recording == false ? .missing : nil)
-    ?? SnapshotTestingConfiguration.current?.record
-    ?? _record
   do {
     var fileUrl = URL(fileURLWithPath: "\(filePath)", isDirectory: false)
     let fileName = fileUrl.deletingPathExtension().lastPathComponent
@@ -376,7 +372,7 @@ public func verifySnapshot<Value, Format>(
     let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
 
     guard fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
-      if record == .all {
+      if recording ?? false {
         try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
       }
       return """
@@ -414,7 +410,7 @@ public func verifySnapshot<Value, Format>(
     let failedSnapshotFileUrl = artifactsSubUrl.appendingPathComponent(
       snapshotReferenceFileUrl.lastPathComponent)
     try snapshotting.diffing.toData(diffable).write(to: failedSnapshotFileUrl)
-    if record == .all {
+    if recording ?? false {
       // MARK: - Changed snapshots
       try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotChangesUrl, snapshotFileName: snapshotFileName)
       
@@ -448,10 +444,6 @@ public func verifySnapshot<Value, Format>(
       failureMessage = "Snapshot \"\(name)\" does not match reference."
     } else {
       failureMessage = "Snapshot does not match reference."
-    }
-
-    if record == .failed {
-      failureMessage += " A new snapshot was automatically recorded."
     }
 
     return """
