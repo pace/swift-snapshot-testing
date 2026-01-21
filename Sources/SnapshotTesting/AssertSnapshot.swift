@@ -373,16 +373,6 @@ public func verifySnapshot<Value, Format>(
     }
     try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotTargetsUrl, snapshotFileName: snapshotFileName)
     
-    if record == .all {
-
-      return """
-        Record mode is on. Automatically recorded snapshot: …
-
-        open "\(snapshotFileName)"
-
-        Turn record mode off and re-run "\(testName)" to assert against the newly-recorded snapshot
-        """
-    }
     let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
 
     guard fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
