@@ -449,13 +449,17 @@ public func verifySnapshot<Value, Format>(
     return """
       \(failureMessage)
 
-      \(diffMessage)
-
       \(failure.trimmingCharacters(in: .whitespacesAndNewlines))
       """
   } catch {
     return error.localizedDescription
   }
+}
+
+private func writeToDirectory<Value, Format>(snapshotting: Snapshotting<Value, Format>, format: Format, directoryUrl: URL, snapshotFileName: String) throws {
+  try FileManager.default.createDirectory(at: directoryUrl, withIntermediateDirectories: true)
+  let snapshotFileUrl = directoryUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
+  try snapshotting.diffing.toData(format).write(to: snapshotFileUrl)
 }
 
 private func writeToDirectory<Value, Format>(snapshotting: Snapshotting<Value, Format>, format: Format, directoryUrl: URL, snapshotFileName: String) throws {

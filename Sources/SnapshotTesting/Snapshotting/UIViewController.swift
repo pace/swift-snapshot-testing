@@ -72,7 +72,7 @@
         precision: precision, perceptualPrecision: perceptualPrecision, scale: traits.displayScale
       ).asyncPullback { viewController in
         snapshotView(
-          config: .init(safeArea: .zero, size: size, traits: traits),
+          config: config ?? .init(safeArea: .zero, size: size, traits: traits),
           drawHierarchyInKeyWindow: drawHierarchyInKeyWindow,
           traits: traits,
           view: viewController.view,
