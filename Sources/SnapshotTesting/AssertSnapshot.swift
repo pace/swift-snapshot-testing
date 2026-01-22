@@ -1,20 +1,85 @@
 import XCTest
 
-/// Enhances failure messages with a command line diff tool expression that can be copied and pasted into a terminal.
-///
-///     diffTool = "ksdiff"
-public var diffTool: String? = nil
+#if canImport(Testing)
+  import Testing
+#endif
 
-/// Whether or not to record all new references.
-public var isRecording = false
-
-/// Whether or not to record all new references.
-/// Due to a name clash in Xcode 12, this has been renamed to `isRecording`.
-@available(*, deprecated, renamed: "isRecording")
-public var record: Bool {
-  get { isRecording }
-  set { isRecording = newValue }
+/// Enhances failure messages with a command line diff tool expression that can be copied and pasted
+/// into a terminal.
+@available(
+  *,
+  deprecated,
+  message:
+    "Use 'withSnapshotTesting' to customize the diff tool. See the documentation for more information."
+)
+public var diffTool: SnapshotTestingConfiguration.DiffTool {
+  get {
+    _diffTool
+  }
+  set { _diffTool = newValue }
 }
+
+@_spi(Internals)
+public var _diffTool: SnapshotTestingConfiguration.DiffTool {
+  get {
+    #if canImport(Testing)
+      if let test = Test.current {
+        for trait in test.traits.reversed() {
+          if let diffTool = (trait as? _SnapshotsTestTrait)?.configuration.diffTool {
+            return diffTool
+          }
+        }
+      }
+    #endif
+    return __diffTool
+  }
+  set {
+    __diffTool = newValue
+  }
+}
+
+@_spi(Internals)
+public var __diffTool: SnapshotTestingConfiguration.DiffTool = .default
+
+/// Whether or not to record all new references.
+@available(
+  *, deprecated,
+  message:
+    "Use 'withSnapshotTesting' to customize the record mode. See the documentation for more information."
+)
+public var isRecording: Bool {
+  get { SnapshotTestingConfiguration.current?.record ?? _record == .all }
+  set { _record = newValue ? .all : .missing }
+}
+
+@_spi(Internals)
+public var _record: SnapshotTestingConfiguration.Record {
+  get {
+    #if canImport(Testing)
+      if let test = Test.current {
+        for trait in test.traits.reversed() {
+          if let record = (trait as? _SnapshotsTestTrait)?.configuration.record {
+            return record
+          }
+        }
+      }
+    #endif
+    return __record
+  }
+  set {
+    __record = newValue
+  }
+}
+
+@_spi(Internals)
+public var __record: SnapshotTestingConfiguration.Record = {
+  if let value = ProcessInfo.processInfo.environment["SNAPSHOT_TESTING_RECORD"],
+    let record = SnapshotTestingConfiguration.Record(rawValue: value)
+  {
+    return record
+  }
+  return .missing
+}()
 
 /// Asserts that a given value matches a reference on disk.
 ///
@@ -24,64 +89,91 @@ public var record: Bool {
 ///   - name: An optional description of the snapshot.
 ///   - recording: Whether or not to record a new reference.
 ///   - timeout: The amount of time a snapshot must be generated in.
-///   - file: The file in which failure occurred. Defaults to the file name of the test case in which this function was called.
-///   - testName: The name of the test in which failure occurred. Defaults to the function name of the test case in which this function was called.
-///   - line: The line number on which failure occurred. Defaults to the line number on which this function was called.
+///   - fileID: The file ID in which failure occurred. Defaults to the file ID of the test case in
+///     which this function was called.
+///   - file: The file in which failure occurred. Defaults to the file path of the test case in
+///     which this function was called.
+///   - testName: The name of the test in which failure occurred. Defaults to the function name of
+///     the test case in which this function was called.
+///   - line: The line number on which failure occurred. Defaults to the line number on which this
+///     function was called.
+///   - column: The column on which failure occurred. Defaults to the column on which this function
+///     was called.
 public func assertSnapshot<Value, Format>(
-  matching value: @autoclosure () throws -> Value,
+  of value: @autoclosure () throws -> Value,
   as snapshotting: Snapshotting<Value, Format>,
   named name: String? = nil,
-  record recording: Bool = false,
+  record recording: Bool? = nil,
   timeout: TimeInterval = 5,
-  file: StaticString = #file,
+  fileID: StaticString = #fileID,
+  file filePath: StaticString = #filePath,
   testName: String = #function,
-  line: UInt = #line
-  ) {
-
+  line: UInt = #line,
+  column: UInt = #column
+) {
   let failure = verifySnapshot(
-    matching: try value(),
+    of: try value(),
     as: snapshotting,
     named: name,
     record: recording,
     timeout: timeout,
-    file: file,
+    fileID: fileID,
+    file: filePath,
     testName: testName,
-    line: line
+    line: line,
+    column: column
   )
   guard let message = failure else { return }
-  XCTFail(message, file: file, line: line)
+  recordIssue(
+    message,
+    fileID: fileID,
+    filePath: filePath,
+    line: line,
+    column: column
+  )
 }
 
 /// Asserts that a given value matches references on disk.
 ///
 /// - Parameters:
 ///   - value: A value to compare against a reference.
-///   - snapshotting: A dictionary of names and strategies for serializing, deserializing, and comparing values.
+///   - strategies: A dictionary of names and strategies for serializing, deserializing, and
+///     comparing values.
 ///   - recording: Whether or not to record a new reference.
 ///   - timeout: The amount of time a snapshot must be generated in.
-///   - file: The file in which failure occurred. Defaults to the file name of the test case in which this function was called.
-///   - testName: The name of the test in which failure occurred. Defaults to the function name of the test case in which this function was called.
-///   - line: The line number on which failure occurred. Defaults to the line number on which this function was called.
+///   - fileID: The file ID in which failure occurred. Defaults to the file ID of the test case in
+///     which this function was called.
+///   - file: The file in which failure occurred. Defaults to the file path of the test case in
+///     which this function was called.
+///   - testName: The name of the test in which failure occurred. Defaults to the function name of
+///     the test case in which this function was called.
+///   - line: The line number on which failure occurred. Defaults to the line number on which this
+///     function was called.
+///   - column: The column on which failure occurred. Defaults to the column on which this function
+///     was called.
 public func assertSnapshots<Value, Format>(
-  matching value: @autoclosure () throws -> Value,
+  of value: @autoclosure () throws -> Value,
   as strategies: [String: Snapshotting<Value, Format>],
-  record recording: Bool = false,
+  record recording: Bool? = nil,
   timeout: TimeInterval = 5,
-  file: StaticString = #file,
+  fileID: StaticString = #fileID,
+  file filePath: StaticString = #filePath,
   testName: String = #function,
-  line: UInt = #line
-  ) {
-
+  line: UInt = #line,
+  column: UInt = #column
+) {
   try? strategies.forEach { name, strategy in
     assertSnapshot(
-      matching: try value(),
+      of: try value(),
       as: strategy,
       named: name,
       record: recording,
       timeout: timeout,
-      file: file,
+      fileID: fileID,
+      file: filePath,
       testName: testName,
-      line: line
+      line: line,
+      column: column
     )
   }
 }
@@ -90,231 +182,284 @@ public func assertSnapshots<Value, Format>(
 ///
 /// - Parameters:
 ///   - value: A value to compare against a reference.
-///   - snapshotting: An array of strategies for serializing, deserializing, and comparing values.
+///   - strategies: An array of strategies for serializing, deserializing, and comparing values.
 ///   - recording: Whether or not to record a new reference.
 ///   - timeout: The amount of time a snapshot must be generated in.
-///   - file: The file in which failure occurred. Defaults to the file name of the test case in which this function was called.
-///   - testName: The name of the test in which failure occurred. Defaults to the function name of the test case in which this function was called.
-///   - line: The line number on which failure occurred. Defaults to the line number on which this function was called.
+///   - fileID: The file ID in which failure occurred. Defaults to the file ID of the test case in
+///     which this function was called.
+///   - file: The file in which failure occurred. Defaults to the file path of the test case in
+///     which this function was called.
+///   - testName: The name of the test in which failure occurred. Defaults to the function name of
+///     the test case in which this function was called.
+///   - line: The line number on which failure occurred. Defaults to the line number on which this
+///     function was called.
+///   - column: The column on which failure occurred. Defaults to the column on which this function
+///     was called.
 public func assertSnapshots<Value, Format>(
-  matching value: @autoclosure () throws -> Value,
+  of value: @autoclosure () throws -> Value,
   as strategies: [Snapshotting<Value, Format>],
-  record recording: Bool = false,
+  record recording: Bool? = nil,
   timeout: TimeInterval = 5,
-  file: StaticString = #file,
+  fileID: StaticString = #fileID,
+  file filePath: StaticString = #filePath,
   testName: String = #function,
-  line: UInt = #line
-  ) {
-
+  line: UInt = #line,
+  column: UInt = #column
+) {
   try? strategies.forEach { strategy in
     assertSnapshot(
-      matching: try value(),
+      of: try value(),
       as: strategy,
       record: recording,
       timeout: timeout,
-      file: file,
+      fileID: fileID,
+      file: filePath,
       testName: testName,
-      line: line
+      line: line,
+      column: column
     )
   }
 }
 
 /// Verifies that a given value matches a reference on disk.
 ///
-/// Third party snapshot assert helpers can be built on top of this function. Simply invoke `verifySnapshot` with your own arguments, and then invoke `XCTFail` with the string returned if it is non-`nil`. For example, if you want the snapshot directory to be determined by an environment variable, you can create your own assert helper like so:
+/// Third party snapshot assert helpers can be built on top of this function. Simply invoke
+/// `verifySnapshot` with your own arguments, and then invoke `XCTFail` with the string returned if
+/// it is non-`nil`. For example, if you want the snapshot directory to be determined by an
+/// environment variable, you can create your own assert helper like so:
 ///
-///     public func myAssertSnapshot<Value, Format>(
-///       matching value: @autoclosure () throws -> Value,
-///       as snapshotting: Snapshotting<Value, Format>,
-///       named name: String? = nil,
-///       record recording: Bool = false,
-///       timeout: TimeInterval = 5,
-///       file: StaticString = #file,
-///       testName: String = #function,
-///       line: UInt = #line
-///       ) {
+/// ```swift
+/// public func myAssertSnapshot<Value, Format>(
+///   of value: @autoclosure () throws -> Value,
+///   as snapshotting: Snapshotting<Value, Format>,
+///   named name: String? = nil,
+///   record recording: Bool = false,
+///   timeout: TimeInterval = 5,
+///   file: StaticString = #file,
+///   testName: String = #function,
+///   line: UInt = #line
+///   ) {
 ///
-///         let snapshotDirectory = ProcessInfo.processInfo.environment["SNAPSHOT_REFERENCE_DIR"]! + "/" + #file
-///         let failure = verifySnapshot(
-///           matching: value,
-///           as: snapshotting,
-///           named: name,
-///           record: recording,
-///           snapshotDirectory: snapshotDirectory,
-///           timeout: timeout,
-///           file: file,
-///           testName: testName
-///         )
-///         guard let message = failure else { return }
-///         XCTFail(message, file: file, line: line)
-///     }
+///     let snapshotDirectory = ProcessInfo.processInfo.environment["SNAPSHOT_REFERENCE_DIR"]! + "/" + #file
+///     let failure = verifySnapshot(
+///       of: value,
+///       as: snapshotting,
+///       named: name,
+///       record: recording,
+///       snapshotDirectory: snapshotDirectory,
+///       timeout: timeout,
+///       file: file,
+///       testName: testName
+///     )
+///     guard let message = failure else { return }
+///     XCTFail(message, file: file, line: line)
+/// }
+/// ```
 ///
 /// - Parameters:
 ///   - value: A value to compare against a reference.
 ///   - snapshotting: A strategy for serializing, deserializing, and comparing values.
 ///   - name: An optional description of the snapshot.
 ///   - recording: Whether or not to record a new reference.
-///   - snapshotDirectory: Optional directory to save snapshots. By default snapshots will be saved in a directory with the same name as the test file, and that directory will sit inside a directory `__Snapshots__` that sits next to your test file.
+///   - snapshotDirectory: Optional directory to save snapshots. By default snapshots will be saved
+///     in a directory with the same name as the test file, and that directory will sit inside a
+///     directory `__Snapshots__` that sits next to your test file.
 ///   - timeout: The amount of time a snapshot must be generated in.
-///   - file: The file in which failure occurred. Defaults to the file name of the test case in which this function was called.
-///   - testName: The name of the test in which failure occurred. Defaults to the function name of the test case in which this function was called.
-///   - line: The line number on which failure occurred. Defaults to the line number on which this function was called.
+///   - file: The file in which failure occurred. Defaults to the file name of the test case in
+///     which this function was called.
+///   - testName: The name of the test in which failure occurred. Defaults to the function name of
+///     the test case in which this function was called.
+///   - line: The line number on which failure occurred. Defaults to the line number on which this
+///     function was called.
 /// - Returns: A failure message or, if the value matches, nil.
 public func verifySnapshot<Value, Format>(
-  matching value: @autoclosure () throws -> Value,
+  of value: @autoclosure () throws -> Value,
   as snapshotting: Snapshotting<Value, Format>,
   named name: String? = nil,
-  record recording: Bool = false,
+  record recording: Bool? = nil,
   snapshotDirectory: String? = nil,
   timeout: TimeInterval = 5,
-  file: StaticString = #file,
+  fileID: StaticString = #fileID,
+  file filePath: StaticString = #file,
   testName: String = #function,
-  line: UInt = #line
-  )
-  -> String? {
+  line: UInt = #line,
+  column: UInt = #column
+) -> String? {
+  #if canImport(Testing)
+    if Test.current == nil {
+      CleanCounterBetweenTestCases.registerIfNeeded()
+    }
+  #else
+    CleanCounterBetweenTestCases.registerIfNeeded()
+  #endif
 
-    let recording = recording || isRecording
+  do {
+    var fileUrl = URL(fileURLWithPath: "\(filePath)", isDirectory: false)
+    let fileName = fileUrl.deletingPathExtension().lastPathComponent
+    let sanitizedFileName = sanitizePathComponent(fileName)
+    let fileNamePrefix = sanitizedFileName.prefix(1).lowercased() + sanitizedFileName.dropFirst()
 
-    do {
-      var fileUrl = URL(fileURLWithPath: "\(file)", isDirectory: false)
-      let fileName = fileUrl.deletingPathExtension().lastPathComponent
-      let sanitizedFileName = sanitizePathComponent(fileName)
-      let fileNamePrefix = sanitizedFileName.prefix(1).lowercased() + sanitizedFileName.dropFirst()
 
-      while(fileUrl.lastPathComponent != "PACEDriveSnapshotTests") {
-        fileUrl = fileUrl.deletingLastPathComponent()
+    #if os(Android)
+      // When running tests on Android, the CI script copies the Tests/SnapshotTestingTests/__Snapshots__ up to the temporary folder
+      let snapshotsBaseUrl = URL(
+        fileURLWithPath: "/data/local/tmp/android-xctest", isDirectory: true)
+    #else
+      let snapshotsBaseUrl = fileUrl.deletingLastPathComponent()
+    #endif
+
+    while(fileUrl.lastPathComponent != "PACEDriveSnapshotTests") {
+      fileUrl = fileUrl.deletingLastPathComponent()
+    }
+
+    let projectDirectoryUrl = snapshotDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? fileUrl
+
+    let snapshotReferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotReferences")
+    let snapshotTargetsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotTargets")
+    let snapshotAdditionsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotAdditions")
+    let snapshotChangesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotChanges")
+    let snapshotDifferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotDifferences")
+
+    let identifier: String
+    if let name = name {
+      identifier = sanitizePathComponent(name)
+    } else {
+      let counter = counterQueue.sync { () -> Int in
+        let key = snapshotReferencesUrl.appendingPathComponent(testName)
+        counterMap[key, default: 0] += 1
+        return counterMap[key]!
       }
+      identifier = String(counter)
+    }
 
-      let projectDirectoryUrl = snapshotDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? fileUrl
-
-      let snapshotReferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotReferences")
-      let snapshotTargetsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotTargets")
-      let snapshotAdditionsUrl = projectDirectoryUrl.appendingPathComponent("SnapshotAdditions")
-      let snapshotChangesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotChanges")
-      let snapshotDifferencesUrl = projectDirectoryUrl.appendingPathComponent("SnapshotDifferences")
-
-      let identifier: String
-      if let name = name {
-        identifier = sanitizePathComponent(name)
-      } else {
-        let counter = counterQueue.sync { () -> Int in
-          let key = snapshotReferencesUrl.appendingPathComponent(testName)
-          counterMap[key, default: 0] += 1
-          return counterMap[key]!
-        }
-        identifier = String(counter)
-      }
-
-      let testName = sanitizePathComponent(testName)
-      let snapshotFileName = "\(fileNamePrefix).\(testName).\(identifier)"
-
-      let fileManager = FileManager.default
-      try fileManager.createDirectory(at: snapshotReferencesUrl, withIntermediateDirectories: true)
-
-      let tookSnapshot = XCTestExpectation(description: "Took snapshot")
-      var optionalDiffable: Format?
-      snapshotting.snapshot(try value()).run { b in
-        optionalDiffable = b
-        tookSnapshot.fulfill()
-      }
-      let result = XCTWaiter.wait(for: [tookSnapshot], timeout: timeout)
-      switch result {
-      case .completed:
-        break
-      case .timedOut:
-        return """
-          Exceeded timeout of \(timeout) seconds waiting for snapshot.
-
-          This can happen when an asynchronously rendered view (like a web view) has not loaded. \
-          Ensure that every subview of the view hierarchy has loaded to avoid timeouts, or, if a \
-          timeout is unavoidable, consider setting the "timeout" parameter of "assertSnapshot" to \
-          a higher value.
-          """
-      case .incorrectOrder, .invertedFulfillment, .interrupted:
-        return "Couldn't snapshot value"
-      @unknown default:
-        return "Couldn't snapshot value"
-      }
-
-      guard var diffable = optionalDiffable else {
-        return "Couldn't snapshot value"
-      }
-
-      // MARK: - Target snapshots
-      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotTargetsUrl, snapshotFileName: snapshotFileName)
-
-      let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
+    let testName = sanitizePathComponent(testName)
+    // var snapshotFileUrl = snapshotReferencesUrl.appendingPathComponent("\(testName).\(identifier)")
+    let snapshotFileName = "\(fileNamePrefix).\(testName).\(identifier)"
       
-      guard fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
-        if(recording) {
-          try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
-        }
-        return
-            recording ?
-            """
-            No reference was found on disk. A new snapshot has been created to the "SnapshotAdditions" folder.
+    let fileManager = FileManager.default
+    try fileManager.createDirectory(at: snapshotReferencesUrl, withIntermediateDirectories: true)
 
-            open "SnapshotAdditions" folder and add the content to the "SnapshotReferences" folder
+    let tookSnapshot = XCTestExpectation(description: "Took snapshot")
+    var optionalDiffable: Format?
+    snapshotting.snapshot(try value()).run { b in
+      optionalDiffable = b
+      tookSnapshot.fulfill()
+    }
+    let result = XCTWaiter.wait(for: [tookSnapshot], timeout: timeout)
+    switch result {
+    case .completed:
+      break
+    case .timedOut:
+      return """
+        Exceeded timeout of \(timeout) seconds waiting for snapshot.
 
-            Then Re-run "\(testName)" to test against the newly-recorded snapshot.
-            """
-            :
-            """
-            No reference was found on disk. Re-run with recording enabled.
-            """
+        This can happen when an asynchronously rendered view (like a web view) has not loaded. \
+        Ensure that every subview of the view hierarchy has loaded to avoid timeouts, or, if a \
+        timeout is unavoidable, consider setting the "timeout" parameter of "assertSnapshot" to \
+        a higher value.
+        """
+    case .incorrectOrder, .invertedFulfillment, .interrupted:
+      return "Couldn't snapshot value"
+    @unknown default:
+      return "Couldn't snapshot value"
+    }
+
+    guard var diffable = optionalDiffable else {
+      return "Couldn't snapshot value"
+    }
+    try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotTargetsUrl, snapshotFileName: snapshotFileName)
+    
+    let snapshotReferenceFileUrl = snapshotReferencesUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
+
+    guard fileManager.fileExists(atPath: snapshotReferenceFileUrl.path) else {
+      if recording ?? false {
+        try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotAdditionsUrl, snapshotFileName: snapshotFileName)
       }
+      return """
+        Record mode is on. Automatically recorded snapshot: …
 
-      let data = try Data(contentsOf: snapshotReferenceFileUrl)
-      let reference = snapshotting.diffing.fromData(data)
+        open "\(snapshotFileName)"
 
-      #if os(iOS) || os(tvOS)
-      // If the image generation fails for the diffable part use the reference
-      if let localDiff = diffable as? UIImage, localDiff.size == .zero {
+        Turn record mode off and re-run "\(testName)" to assert against the newly-recorded snapshot
+        """
+    }
+
+    let data = try Data(contentsOf: snapshotReferenceFileUrl)
+    let reference = snapshotting.diffing.fromData(data)
+
+    #if os(iOS) || os(tvOS)
+      // If the image generation fails for the diffable part and the reference was empty, use the reference
+      if let localDiff = diffable as? UIImage,
+        let refImage = reference as? UIImage,
+        localDiff.size == .zero && refImage.size == .zero
+      {
         diffable = reference
       }
-      #endif
+    #endif
 
-      guard let (failure, attachments) = snapshotting.diffing.diff(reference, diffable) else {
-        return nil
+    guard let (failure, attachments) = snapshotting.diffing.diff(reference, diffable) else {
+      return nil
+    }
+
+    let artifactsUrl = URL(
+      fileURLWithPath: ProcessInfo.processInfo.environment["SNAPSHOT_ARTIFACTS"]
+        ?? NSTemporaryDirectory(), isDirectory: true
+    )
+    let artifactsSubUrl = artifactsUrl.appendingPathComponent(fileName)
+    try fileManager.createDirectory(at: artifactsSubUrl, withIntermediateDirectories: true)
+    let failedSnapshotFileUrl = artifactsSubUrl.appendingPathComponent(
+      snapshotReferenceFileUrl.lastPathComponent)
+    try snapshotting.diffing.toData(diffable).write(to: failedSnapshotFileUrl)
+    if recording ?? false {
+      // MARK: - Changed snapshots
+      try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotChangesUrl, snapshotFileName: snapshotFileName)
+      
+      // MARK: - Diff snapshots
+      if let difference = snapshotting.diffing.difference?(reference, diffable) {
+        try writeToDirectory(snapshotting: snapshotting, format: difference, directoryUrl: snapshotDifferencesUrl, snapshotFileName: snapshotFileName)
       }
+    }
 
-      if(recording) {
-        // MARK: - Changed snapshots
-        try writeToDirectory(snapshotting: snapshotting, format: diffable, directoryUrl: snapshotChangesUrl, snapshotFileName: snapshotFileName)
-  
-        // MARK: - Diff snapshots
-        if let difference = snapshotting.diffing.difference?(reference, diffable) {
-          try writeToDirectory(snapshotting: snapshotting, format: difference, directoryUrl: snapshotDifferencesUrl, snapshotFileName: snapshotFileName)
-        }
-      }
-
-      if !attachments.isEmpty {
-        #if !os(Linux) && !os(Windows)
-        if ProcessInfo.processInfo.environment.keys.contains("__XCODE_BUILT_PRODUCTS_DIR_PATHS") {
+    if !attachments.isEmpty {
+      #if !os(Linux) && !os(Android) && !os(Windows)
+        if ProcessInfo.processInfo.environment.keys.contains("__XCODE_BUILT_PRODUCTS_DIR_PATHS"),
+          !isSwiftTesting
+        {
           XCTContext.runActivity(named: "Attached Failure Diff") { activity in
             attachments.forEach {
               activity.add($0)
             }
           }
         }
-        #endif
-      }
+      #endif
+    }
 
-      let failureMessage: String
-      if let name = name {
-        failureMessage = "Snapshot \"\(name)\" does not match reference."
-      } else {
-        failureMessage = "Snapshot does not match reference."
-      }
+    let diffMessage = (SnapshotTestingConfiguration.current?.diffTool ?? _diffTool)(
+      currentFilePath: snapshotReferenceFileUrl.path,
+      failedFilePath: failedSnapshotFileUrl.path
+    )
 
-      return """
+    var failureMessage: String
+    if let name = name {
+      failureMessage = "Snapshot \"\(name)\" does not match reference."
+    } else {
+      failureMessage = "Snapshot does not match reference."
+    }
+
+    return """
       \(failureMessage)
 
       \(failure.trimmingCharacters(in: .whitespacesAndNewlines))
       """
-    } catch {
-      return error.localizedDescription
-    }
+  } catch {
+    return error.localizedDescription
+  }
+}
+
+private func writeToDirectory<Value, Format>(snapshotting: Snapshotting<Value, Format>, format: Format, directoryUrl: URL, snapshotFileName: String) throws {
+  try FileManager.default.createDirectory(at: directoryUrl, withIntermediateDirectories: true)
+  let snapshotFileUrl = directoryUrl.appendingPathComponent(snapshotFileName).appendingPathExtension(snapshotting.pathExtension ?? "")
+  try snapshotting.diffing.toData(format).write(to: snapshotFileUrl)
 }
 
 private func writeToDirectory<Value, Format>(snapshotting: Snapshotting<Value, Format>, format: Format, directoryUrl: URL, snapshotFileName: String) throws {
@@ -325,11 +470,85 @@ private func writeToDirectory<Value, Format>(snapshotting: Snapshotting<Value, F
 
 // MARK: - Private
 
+private var counter: File.Counter {
+  #if canImport(Testing)
+    if Test.current != nil {
+      return File.counter
+    } else {
+      return _counter
+    }
+  #else
+    return _counter
+  #endif
+}
+
+private let _counter = File.Counter()
 private let counterQueue = DispatchQueue(label: "co.pointfree.SnapshotTesting.counter")
 private var counterMap: [URL: Int] = [:]
 
 func sanitizePathComponent(_ string: String) -> String {
-  return string
+  return
+    string
     .replacingOccurrences(of: "\\W+", with: "-", options: .regularExpression)
     .replacingOccurrences(of: "^-|-$", with: "", options: .regularExpression)
+}
+
+#if !os(Android) && !os(Linux) && !os(Windows)
+  import CoreServices
+
+  func uniformTypeIdentifier(fromExtension pathExtension: String) -> String? {
+    // This can be much cleaner in macOS 11+ using UTType
+    let unmanagedString = UTTypeCreatePreferredIdentifierForTag(
+      kUTTagClassFilenameExtension as CFString,
+      pathExtension as CFString,
+      nil
+    )
+
+    return unmanagedString?.takeRetainedValue() as String?
+  }
+#endif
+
+// We need to clean counter between tests executions in order to support test-iterations.
+private class CleanCounterBetweenTestCases: NSObject, XCTestObservation {
+  private static var registered = false
+
+  static func registerIfNeeded() {
+    guard !registered else { return }
+    defer { registered = true }
+    if Thread.isMainThread {
+      XCTestObservationCenter.shared.addTestObserver(CleanCounterBetweenTestCases())
+    } else {
+      DispatchQueue.main.sync {
+        XCTestObservationCenter.shared.addTestObserver(CleanCounterBetweenTestCases())
+      }
+    }
+  }
+
+  func testCaseDidFinish(_ testCase: XCTestCase) {
+    _counter.reset()
+  }
+}
+
+enum File {
+  @TaskLocal static var counter = Counter()
+
+  final class Counter: @unchecked Sendable {
+    private var counts: [String: Int] = [:]
+    private let lock = NSLock()
+
+    init() {}
+
+    func next(for key: String) -> Int {
+      lock.lock()
+      defer { lock.unlock() }
+      counts[key, default: 0] += 1
+      return counts[key]!
+    }
+
+    func reset() {
+      lock.lock()
+      defer { lock.unlock() }
+      counts.removeAll()
+    }
+  }
 }

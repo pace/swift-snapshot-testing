@@ -9,8 +9,11 @@ public struct Diffing<Value> {
   /// Produces a value _from_ data.
   public var fromData: (Data) -> Value
 
-  /// Compares two values. If the values do not match, returns a failure message and artifacts describing the failure.
+  /// Compares two values. If the values do not match, returns a failure message and artifacts
+  /// describing the failure.
   public var diff: (Value, Value) -> (String, [XCTAttachment])?
+    
+  public var difference: ((Value, Value) -> Value)?
 
   public var difference: ((Value, Value) -> Value)?
 
@@ -18,18 +21,14 @@ public struct Diffing<Value> {
   ///
   /// - Parameters:
   ///   - toData: A function used to convert a value _to_ data.
-  ///   - value: A value to convert into data.
   ///   - fromData: A function used to produce a value _from_ data.
-  ///   - data: Data to convert into a value.
-  ///   - diff: A function used to compare two values. If the values do not match, returns a failure message and artifacts describing the failure.
-  ///   - lhs: A value to compare.
-  ///   - rhs: Another value to compare.
+  ///   - diff: A function used to compare two values. If the values do not match, returns a failure
   public init(
     toData: @escaping (_ value: Value) -> Data,
     fromData: @escaping (_ data: Data) -> Value,
     diff: @escaping (_ lhs: Value, _ rhs: Value) -> (String, [XCTAttachment])?,
     difference: ((_ lhs: Value, _ rhs: Value) -> Value)? = nil
-    ) {
+  ) {
     self.toData = toData
     self.fromData = fromData
     self.diff = diff
