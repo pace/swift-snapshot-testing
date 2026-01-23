@@ -15,8 +15,6 @@ public struct Diffing<Value> {
     
   public var difference: ((Value, Value) -> Value)?
 
-  public var difference: ((Value, Value) -> Value)?
-
   /// Creates a new `Diffing` on `Value`.
   ///
   /// - Parameters:
